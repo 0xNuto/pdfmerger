@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Merge Studio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0e17;
+    --surface: #1a1929;
+    --surface2: #231f38;
+    --accent: #ff6b6b;
+    --accent2: #ffd166;
+    --accent3: #06d6a0;
+    --text: #fffffe;
+    --text-muted: #a7a9be;
+    --border: rgba(255,255,255,0.08);
+    --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .light {
+    --bg: #f4f4f8;
+    --surface: #ffffff;
+    --surface2: #eeeef4;
+    --accent: #e63946;
+    --accent2: #f4a261;
+    --accent3: #2a9d8f;
+    --text: #0f0e17;
+    --text-muted: #5c5d7a;
+    --border: rgba(0,0,0,0.08);
+    --shadow: 0 8px 32px rgba(0,0,0,0.1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    transition: background 0.3s, color 0.3s;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 48px;
+  }
+
+  .logo-area h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  .logo-area h1 span {
+    color: var(--accent);
+    display: inline-block;
+    position: relative;
+  }
+  .logo-area h1 span::after {
+    content: '';
+    position: absolute;
+    bottom: 2px; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent2);
+    border-radius: 2px;
+  }
+  .logo-area p {
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+  }
+
+  .header-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 4px;
+  }
+
+  .theme-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .theme-btn:hover { background: var(--surface2); transform: rotate(20deg); }
+
+  /* Drop Zone */
+  .drop-zone {
+    border: 2px dashed var(--accent);
+    border-radius: 20px;
+    background: var(--surface);
+    padding: 56px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+  .drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(255,107,107,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .drop-zone.drag-over {
+    border-color: var(--accent3);
+    background: var(--surface2);
+    transform: scale(1.01);
+  }
+  .drop-zone-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  .drop-zone h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .drop-zone p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-family: 'DM Mono', monospace;
+  }
+  .drop-zone .browse-btn {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 10px 28px;
+    background: var(--accent);
+    color: white;
+    border-radius: 100px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    font-family: 'Syne', sans-serif;
+  }
+  .drop-zone .browse-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255,107,107,0.35); }
+
+  #file-input { display: none; }
+
+  /* File List */
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 32px 0 12px;
+  }
+
+  .file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .file-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: grab;
+    transition: all 0.2s;
+    animation: slideIn 0.3s ease forwards;
+    position: relative;
+    overflow: hidden;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .file-item::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 3px 0 0 3px;
+  }
+  .file-item.dragging {
+    opacity: 0.4;
+    cursor: grabbing;
+    transform: scale(0.98);
+  }
+  .file-item.drag-target {
+    border-color: var(--accent3);
+    box-shadow: 0 0 0 2px var(--accent3);
+  }
+
+  .file-icon {
+    width: 40px; height: 40px;
+    background: rgba(255,107,107,0.12);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+
+  .file-info { flex: 1; min-width: 0; }
+  .file-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .file-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 3px;
+  }
+
+  .file-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .icon-btn {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+  .icon-btn:hover { background: var(--accent); color: white; border-color: var(--accent); transform: scale(1.1); }
+  .icon-btn.danger:hover { background: #e74c3c; border-color: #e74c3c; }
+
+  .drag-handle {
+    color: var(--text-muted);
+    cursor: grab;
+    font-size: 1rem;
+    flex-shrink: 0;
+    padding: 4px;
+    opacity: 0.5;
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    display: flex;
+    gap: 24px;
+    margin-top: 20px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .stat-value {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--accent2);
+  }
+  .stat-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* Export Options */
+  .export-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px;
+    margin-top: 28px;
+  }
+  .export-panel h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 560px) { .form-row { grid-template-columns: 1fr; } }
+
+  .form-group label {
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .form-group input, .form-group select {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 0.95rem;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  .form-group input:focus, .form-group select:focus {
+    border-color: var(--accent);
+  }
+  .form-group select option {
+    background: var(--surface);
+  }
+
+  /* Format selector */
+  .format-options {
+    display: flex;
+    gap: 10px;
+  }
+  .format-option {
+    flex: 1;
+    position: relative;
+  }
+  .format-option input[type="radio"] { display: none; }
+  .format-option label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 10px;
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .format-option label .fmt-icon { font-size: 1.4rem; }
+  .format-option input:checked + label {
+    border-color: var(--accent);
+    background: rgba(255,107,107,0.1);
+    color: var(--accent);
+  }
+  .format-option label:hover { border-color: var(--accent); }
+
+  /* Merge button */
+  .merge-btn {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--accent), #ff8e53);
+    color: white;
+    border: none;
+    border-radius: 14px;
+    font-family: 'Syne', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.25s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 20px;
+    letter-spacing: 0.02em;
+  }
+  .merge-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(255,107,107,0.4);
+  }
+  .merge-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* Progress */
+  .progress-wrap {
+    margin-top: 20px;
+    display: none;
+  }
+  .progress-wrap.visible { display: block; }
+  .progress-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .progress-bar-bg {
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 100px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent3), var(--accent2));
+    border-radius: 100px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+
+  /* Download button */
+  .download-btn {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--accent3), #00b4d8);
+    color: white;
+    border: none;
+    border-radius: 14px;
+    font-family: 'Syne', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.25s;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 12px;
+    letter-spacing: 0.02em;
+    animation: pop 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  }
+  @keyframes pop {
+    from { transform: scale(0.85); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .download-btn.visible { display: flex; }
+  .download-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(6,214,160,0.35);
+  }
+
+  /* Toast */
+  .toast-container {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .toast {
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 340px;
+    box-shadow: var(--shadow);
+    animation: toastIn 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    backdrop-filter: blur(12px);
+  }
+  @keyframes toastIn {
+    from { transform: translateX(60px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  .toast.success { background: rgba(6,214,160,0.9); color: #0f0e17; }
+  .toast.error { background: rgba(231,76,60,0.9); color: white; }
+  .toast.info { background: rgba(255,209,102,0.9); color: #0f0e17; }
+
+  /* Preview modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: 20px;
+    padding: 24px;
+    max-width: 600px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+    animation: modalIn 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes modalIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .modal-header h3 { font-size: 1.1rem; font-weight: 700; }
+  .modal canvas {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: white;
+  }
+  .modal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 14px;
+  }
+  .modal-nav button {
+    padding: 8px 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+  .modal-nav button:hover:not(:disabled) { background: var(--accent); color: white; border-color: var(--accent); }
+  .modal-nav button:disabled { opacity: 0.3; cursor: not-allowed; }
+  .modal-nav span {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.85rem;
+    display: none;
+  }
+  .empty-state.visible { display: block; }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .stats-bar { gap: 14px; flex-wrap: wrap; }
+    .file-item { padding: 10px 12px; }
+    header { flex-direction: column; gap: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo-area">
+      <h1>PDF <span>Merge</span> Studio</h1>
+      <p>// drag · reorder · export</p>
+    </div>
+    <div class="header-controls">
+      <button class="theme-btn" id="theme-toggle" title="Toggle theme">🌙</button>
+    </div>
+  </header>
+
+  <!-- Drop Zone -->
+  <div class="drop-zone" id="drop-zone">
+    <div class="drop-zone-icon">📄</div>
+    <h2>Drop your PDFs here</h2>
+    <p>Supports multiple files &nbsp;·&nbsp; Max 50MB per file</p>
+    <button class="browse-btn" onclick="document.getElementById('file-input').click()">Browse Files</button>
+    <input type="file" id="file-input" multiple accept=".pdf">
+  </div>
+
+  <!-- File List -->
+  <div id="file-section" style="display:none">
+    <p class="section-label">📁 Files to merge — drag to reorder</p>
+    <div class="file-list" id="file-list"></div>
+
+    <div class="empty-state" id="empty-state">
+      No files yet. Drop some PDFs above ↑
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-bar" id="stats-bar">
+      <div class="stat">
+        <span class="stat-value" id="stat-files">0</span>
+        <span class="stat-label">Files</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-size">0 KB</span>
+        <span class="stat-label">Total Size</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-pages">—</span>
+        <span class="stat-label">Est. Pages</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Panel -->
+  <div class="export-panel" id="export-panel" style="display:none">
+    <h3>⚙️ Export Options</h3>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Output File Name</label>
+        <input type="text" id="output-name" value="merged-document" placeholder="merged-document">
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom: 0">
+      <label>Export Format</label>
+      <div class="format-options">
+        <div class="format-option">
+          <input type="radio" name="format" id="fmt-pdf" value="pdf" checked>
+          <label for="fmt-pdf">
+            <span class="fmt-icon">📑</span>
+            PDF
+          </label>
+        </div>
+        <div class="format-option">
+          <input type="radio" name="format" id="fmt-zip" value="zip">
+          <label for="fmt-zip">
+            <span class="fmt-icon">🗜️</span>
+            ZIP
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-label">
+        <span id="progress-text">Processing...</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+    </div>
+
+    <button class="merge-btn" id="merge-btn" disabled>
+      <span>⚡</span> Merge & Prepare Download
+    </button>
+
+    <button class="download-btn" id="download-btn">
+      <span>⬇️</span> Download File
+    </button>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Preview Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Preview</h3>
+      <button class="icon-btn" onclick="closeModal()">✕</button>
+    </div>
+    <canvas id="preview-canvas"></canvas>
+    <div class="modal-nav">
+      <button id="prev-page" onclick="changePage(-1)">← Prev</button>
+      <span id="page-indicator">Page 1 of 1</span>
+      <button id="next-page" onclick="changePage(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+let files = [];
+let dragSrcIndex = null;
+let mergedBlob = null;
+let previewPDF = null;
+let previewPage = 1;
+let previewMaxPages = 1;
+let pdfJsLoaded = false;
+let totalPages = 0;
+
+// ─── Theme ────────────────────────────────────────────────────────────────────
+const themeBtn = document.getElementById('theme-toggle');
+let isLight = false;
+themeBtn.addEventListener('click', () => {
+  isLight = !isLight;
+  document.body.classList.toggle('light', isLight);
+  themeBtn.textContent = isLight ? '☀️' : '🌙';
+});
+
+// ─── Drop Zone ────────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', e => {
+  if (!e.target.classList.contains('browse-btn')) fileInput.click();
+});
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  handleFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', e => handleFiles([...e.target.files]));
+
+// ─── File Handling ────────────────────────────────────────────────────────────
+function handleFiles(newFiles) {
+  const MAX_SIZE = 50 * 1024 * 1024;
+  let added = 0, rejected = 0;
+
+  newFiles.forEach(f => {
+    if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
+      showToast(`"${f.name}" is not a PDF file`, 'error');
+      rejected++;
+      return;
+    }
+    if (f.size > MAX_SIZE) {
+      showToast(`"${f.name}" exceeds 50MB limit`, 'error');
+      rejected++;
+      return;
+    }
+    if (files.find(x => x.file.name === f.name && x.file.size === f.size)) {
+      showToast(`"${f.name}" is already added`, 'info');
+      return;
+    }
+    files.push({ file: f, id: Date.now() + Math.random() });
+    added++;
+  });
+
+  if (added) { showToast(`${added} file${added > 1 ? 's' : ''} added`, 'success'); }
+  fileInput.value = '';
+  mergedBlob = null;
+  render();
+}
+
+function removeFile(id) {
+  files = files.filter(f => f.id !== id);
+  mergedBlob = null;
+  render();
+}
+
+function moveFile(fromIdx, toIdx) {
+  if (toIdx < 0 || toIdx >= files.length) return;
+  const [item] = files.splice(fromIdx, 1);
+  files.splice(toIdx, 0, item);
+  mergedBlob = null;
+  render();
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function render() {
+  const list = document.getElementById('file-list');
+  const fileSection = document.getElementById('file-section');
+  const exportPanel = document.getElementById('export-panel');
+  const mergeBtn = document.getElementById('merge-btn');
+  const downloadBtn = document.getElementById('download-btn');
+  const emptyState = document.getElementById('empty-state');
+
+  fileSection.style.display = files.length > 0 ? 'block' : 'none';
+  exportPanel.style.display = files.length > 0 ? 'block' : 'none';
+  emptyState.classList.toggle('visible', files.length === 0);
+  mergeBtn.disabled = files.length < 1;
+
+  if (!mergedBlob) {
+    downloadBtn.classList.remove('visible');
+  }
+
+  list.innerHTML = '';
+  files.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = 'file-item';
+    div.draggable = true;
+    div.dataset.idx = idx;
+
+    div.innerHTML = `
+      <span class="drag-handle">⠿</span>
+      <div class="file-icon">📄</div>
+      <div class="file-info">
+        <div class="file-name" title="${item.file.name}">${item.file.name}</div>
+        <div class="file-meta">${formatSize(item.file.size)} · ${idx + 1} of ${files.length}</div>
+      </div>
+      <div class="file-actions">
+        <button class="icon-btn" title="Preview" onclick="previewFile(${idx})">👁</button>
+        <button class="icon-btn" title="Move up" onclick="moveFile(${idx}, ${idx - 1})" ${idx === 0 ? 'disabled style="opacity:0.3;cursor:not-allowed"' : ''}>↑</button>
+        <button class="icon-btn" title="Move down" onclick="moveFile(${idx}, ${idx + 1})" ${idx === files.length - 1 ? 'disabled style="opacity:0.3;cursor:not-allowed"' : ''}>↓</button>
+        <button class="icon-btn danger" title="Remove" onclick="removeFile(${item.id})">✕</button>
+      </div>
+    `;
+
+    // Drag events
+    div.addEventListener('dragstart', e => {
+      dragSrcIndex = idx;
+      setTimeout(() => div.classList.add('dragging'), 0);
+    });
+    div.addEventListener('dragend', () => {
+      div.classList.remove('dragging');
+      document.querySelectorAll('.file-item').forEach(el => el.classList.remove('drag-target'));
+    });
+    div.addEventListener('dragover', e => {
+      e.preventDefault();
+      document.querySelectorAll('.file-item').forEach(el => el.classList.remove('drag-target'));
+      div.classList.add('drag-target');
+    });
+    div.addEventListener('drop', e => {
+      e.preventDefault();
+      if (dragSrcIndex !== null && dragSrcIndex !== idx) {
+        moveFile(dragSrcIndex, idx);
+      }
+    });
+
+    list.appendChild(div);
+  });
+
+  updateStats();
+}
+
+function updateStats() {
+  const totalSize = files.reduce((s, f) => s + f.file.size, 0);
+  document.getElementById('stat-files').textContent = files.length;
+  document.getElementById('stat-size').textContent = formatSize(totalSize);
+  document.getElementById('stat-pages').textContent = totalPages > 0 ? totalPages : '—';
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// ─── Merge ────────────────────────────────────────────────────────────────────
+document.getElementById('merge-btn').addEventListener('click', async () => {
+  if (!files.length) return;
+  setProgress(true, 'Initializing...', 0);
+  mergedBlob = null;
+
+  const format = document.querySelector('input[name="format"]:checked').value;
+  const mergeBtn = document.getElementById('merge-btn');
+  mergeBtn.disabled = true;
+
+  try {
+    if (format === 'pdf') {
+      mergedBlob = await mergePDFs();
+    } else {
+      mergedBlob = await createZIP();
+    }
+
+    setProgress(true, 'Done! Ready to download.', 100);
+    totalPages = mergedBlob._pageCount || 0;
+    updateStats();
+
+    const downloadBtn = document.getElementById('download-btn');
+    downloadBtn.classList.add('visible');
+    showToast('Merge complete! Click Download to save.', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('Error processing files: ' + err.message, 'error');
+    setProgress(false);
+  }
+
+  mergeBtn.disabled = false;
+});
+
+async function mergePDFs() {
+  const { PDFDocument } = PDFLib;
+  const merged = await PDFDocument.create();
+
+  for (let i = 0; i < files.length; i++) {
+    const pct = Math.round((i / files.length) * 90);
+    setProgress(true, `Processing ${files[i].file.name}…`, pct);
+
+    const arrayBuffer = await files[i].file.arrayBuffer();
+    let srcDoc;
+    try {
+      srcDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+    } catch (e) {
+      throw new Error(`Could not read "${files[i].file.name}". It may be corrupted or password-protected.`);
+    }
+
+    const pages = await merged.copyPages(srcDoc, srcDoc.getPageIndices());
+    pages.forEach(p => merged.addPage(p));
+  }
+
+  setProgress(true, 'Finalizing PDF…', 95);
+  const pdfBytes = await merged.save();
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  blob._pageCount = merged.getPageCount();
+  return blob;
+}
+
+async function createZIP() {
+  const zip = new JSZip();
+  const folder = zip.folder('merged-pdfs');
+
+  for (let i = 0; i < files.length; i++) {
+    setProgress(true, `Adding ${files[i].file.name}…`, Math.round((i / files.length) * 80));
+    const arrayBuffer = await files[i].file.arrayBuffer();
+    folder.file(files[i].file.name, arrayBuffer);
+  }
+
+  setProgress(true, 'Compressing ZIP…', 90);
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  return blob;
+}
+
+// ─── Download ─────────────────────────────────────────────────────────────────
+document.getElementById('download-btn').addEventListener('click', () => {
+  if (!mergedBlob) return;
+
+  const format = document.querySelector('input[name="format"]:checked').value;
+  const baseName = document.getElementById('output-name').value.trim() || 'merged-document';
+  const ext = format === 'zip' ? '.zip' : '.pdf';
+  const fileName = baseName.endsWith(ext) ? baseName : baseName + ext;
+
+  const url = URL.createObjectURL(mergedBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  showToast(`Downloading "${fileName}"`, 'success');
+});
+
+// ─── Progress ─────────────────────────────────────────────────────────────────
+function setProgress(show, text, pct) {
+  const wrap = document.getElementById('progress-wrap');
+  wrap.classList.toggle('visible', show);
+  if (show) {
+    document.getElementById('progress-text').textContent = text;
+    document.getElementById('progress-pct').textContent = pct + '%';
+    document.getElementById('progress-fill').style.width = pct + '%';
+  }
+}
+
+// ─── Preview ──────────────────────────────────────────────────────────────────
+async function previewFile(idx) {
+  const file = files[idx].file;
+
+  if (!pdfJsLoaded) {
+    showToast('Loading PDF previewer…', 'info');
+    await loadPdfJs();
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  previewPDF = await loadingTask.promise;
+  previewPage = 1;
+  previewMaxPages = previewPDF.numPages;
+
+  document.getElementById('modal-title').textContent = `Preview: ${file.name}`;
+  document.getElementById('modal-overlay').classList.add('open');
+  renderPreviewPage();
+}
+
+async function renderPreviewPage() {
+  if (!previewPDF) return;
+  const page = await previewPDF.getPage(previewPage);
+  const canvas = document.getElementById('preview-canvas');
+  const ctx = canvas.getContext('2d');
+  const scale = Math.min(window.innerWidth < 600 ? 1.0 : 1.5, 2);
+  const viewport = page.getViewport({ scale });
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  document.getElementById('page-indicator').textContent = `Page ${previewPage} of ${previewMaxPages}`;
+  document.getElementById('prev-page').disabled = previewPage <= 1;
+  document.getElementById('next-page').disabled = previewPage >= previewMaxPages;
+}
+
+function changePage(delta) {
+  previewPage = Math.max(1, Math.min(previewMaxPages, previewPage + delta));
+  renderPreviewPage();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  previewPDF = null;
+}
+
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+});
+
+function loadPdfJs() {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = () => {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      pdfJsLoaded = true;
+      resolve();
+    };
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icons = { success: '✅', error: '❌', info: '💡' };
+  toast.innerHTML = `<span>${icons[type]}</span> ${msg}`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.animation = 'none';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(60px)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+// Initial render
+render();
+</script>
+</body>
+</html>
